@@ -1,0 +1,398 @@
+---
+title: "Algerian Housing Project"
+output: html_notebook
+---
+
+```{r include=FALSE}
+#requir packages
+library(dplyr)
+library(readr)
+library(stringr)
+library(ggplot2)
+library(ggthemes)
+library(cowplot)
+library(ggmap)
+library(leaflet)
+library(htmltools)
+library(scales)
+library(corrplot)
+
+```
+
+#Import the housing_data
+
+```{r include=FALSE}
+
+housing_data <- read_csv("Housing_Data.csv")
+```
+ 
+#View the raw data
+ 
+```{r} 
+head(housing_data)
+```
+
+
+```{r}
+dim(housing_data)
+```
+# subseting an variable of interest
+
+```{r}
+housing_data2<- housing_data %>% 
+  select( Nb.Etage, Nb.Piece,Superficie, Prix.value.dzd,Garage, 
+         Jardin,Meuble,Promotion, Paiement, commune, Quartier,Top_Commune,
+         date,hour, month, year,Announcer_Type, Announcer_Name,
+         Nombre.de.vues, lon, lat) %>% 
+        arrange(desc(Prix.value.dzd),Superficie)
+```
+
+```{r}
+dim(housing_data2)
+```
+```{r}
+head(housing_data2)
+```
+
+
+#create tow variables "cat_vae", "num_var" to distinguiche catégoriales from numerics variables
+
+#1.Numeric variables 
+```{r}
+num_var <- names(housing_data2)[which(sapply(housing_data2, is.numeric))]
+num_var
+```
+#2.Catégorial variables
+```{r}
+cat_var <- names(housing_data2)[which(sapply(housing_data2, is.character))]
+cat_var
+```
+
+#The structure of the data
+```{r}
+summary(housing_data2[num_var])
+```
+
+we see a illogical value in "Nb.Etage", maybe a missentred values
+
+```{r}
+housing_data2 %>% group_by(Nb.Etage) %>% count()
+```
+
+
+we them s outliers and turn them ton NA's
+
+```{r} 
+housing_data2 <- housing_data2 %>% mutate(Nb.Etage=ifelse(Nb.Etage >15, NA, Nb.Etage))
+```
+```{r}
+summary(housing_data2$Nb.Etage)
+```
+```{r}
+ggplot(housing_data2, aes(Nb.Etage))+ geom_histogram()+
+  scale_x_continuous(breaks = seq(1,15))
+```
+
+
+# Catégorial variables
+```{r}
+summary(housing_data2[cat_var])
+```
+
+#convert somme character variables to factors
+
+```{r}
+housing_data2 <-  housing_data2 %>% mutate_if(is.character, as.factor)
+```
+
+
+```{r}
+summary(housing_data2[cat_var])
+```
+
+# check the Duplicates
+
+```{r}
+sum(duplicated(housing_data2))
+```
+
+# view the duplicates rouws.
+
+```{r}
+housing_data2 %>% filter(duplicated(housing_data2) ==TRUE)
+```
+
+#Delete the duplicates.
+
+```{r}
+housing_data2 <- housing_data2 %>% filter(duplicated(housing_data2)==FALSE)
+ dim(housing_data2)
+```
+
+#Dealing wiyh missing values and outliers.
+
+what columns in the housing_data2 data frame contain missing values?
+
+```{r}
+colSums(sapply(housing_data2, is.na))
+```
+
+
+ Note : (Garage, Jardin , Meuble,  Promotion, Paiement) have the same number of NA's (506), 
+ and the same for Announcer_Type and Announcer_Name  (513 NA's).
+
+
+#1.chek if the are in same rouws Garage, jardin, meuble, promtion, paiment:  
+
+```{r}
+housing_data2  %>% filter(is.na(Garage))
+```
+
+#2. chek for Announcer_Type and Announcer_Name:
+
+```{r}
+housing_data2 %>% select(Prix.value.dzd,Announcer_Type, Announcer_Name, Garage) %>% filter(is.na(Announcer_Type))
+```
+
+Note :  there are many startigies to deal with NA's , the simple is to delete theme, in order to not reduce the number of obsevation here we tairte theme  case per case
+
+# we do some exploration to our predictors varables
+
+# wich house's catégorie is the most commun  ?
+
+```{r}
+commun_nb_piece<- housing_data2 %>% count(Nb.Piece, sort=TRUE) %>% mutate(Percentage= percent(n /sum(n)) )
+commun_nb_piece
+```
+we see the house with 3 rooms are the most commun in Algiers  (the half )
+
+```{r}
+ ggplot(commun_nb_piece, aes(Nb.Piece,n ))+geom_bar(stat="identity", fill="#BBBB99")+
+  theme_gdocs()+
+  scale_x_continuous(breaks=seq(1,7))
+
+```
+# how many houses have a grage, jardin a meuble ?
+   and ho many are promotion ?
+
+```{r}
+p1 <-  housing_data2 %>%filter(complete.cases(Meuble)) %>%
+ggplot(housing_data2, mapping = aes(Nb.Piece, fill=Meuble ))+
+geom_bar()+ scale_fill_manual(values = c("#77b7b2","#999999")) 
+
+
+p2 <- housing_data2 %>%filter(complete.cases(Garage)) %>%
+ggplot(housing_data2, mapping = aes(Nb.Piece, fill=Garage ))+
+geom_bar()+ scale_fill_manual(values = c("#77b7b2","#999999")) 
+
+p3 <- housing_data2 %>%filter(complete.cases(Jardin)) %>%
+ggplot(housing_data2, mapping = aes(Nb.Piece, fill=Jardin))+
+geom_bar()+ scale_fill_manual(values = c("#77b7b2","#999999")) 
+
+p4 <-  housing_data2 %>%filter(complete.cases(Promotion)) %>%
+ggplot(housing_data2, mapping = aes(Nb.Piece, fill= Promotion))+
+geom_bar()+ scale_fill_manual(values = c("#77b7b2","#999999")) 
+plot_grid(p1, p2, p3 ,p4,labels = c("House with Meuble", "House with Garage", "House with Jardin", "House with Promotion"), ncol= 2)
+
+  
+```
+
+# Number houses in each year 
+
+```{r}
+nbr_house_year <- housing_data2 %>% count(year, sort=TRUE)
+nbr_house_year
+```
+#Tomake the analysis more efficient we drop the tow years with less Obs
+
+```{r}
+housing_data2<- housing_data2 %>% filter(year!=2012& year!=2013)
+```
+
+```{r}
+ggplot(nbr_house_year ,aes(year,n) )+
+geom_bar(stat="identity", fill="#7fcdbb")+
+  labs(title="Number of house / year")
+```
+
+#Number of houses per month
+
+```{r}
+nbr_house_month <-  housing_data2 %>% count(month, sort=TRUE)
+nbr_house_month
+```
+
+
+```{r}
+ggplot(nbr_house_month, aes(x= reorder(month,n), n))+
+  geom_bar(stat = "identity", fill="#66c2a4")+
+  ggtitle(" Numbre of houses / month")+
+  xlab("month")+
+  ylab("number of house")+
+    coord_flip()
+   
+```
+we know aour stady finsh in feb 2017
+```{r}
+housing_data2 %>% filter(year !=2017) %>% 
+ count(month) %>% 
+ggplot(aes(x= reorder(month,n), n))+geom_bar(stat = "identity", fill="#66c2a4")+
+  ggtitle(" Numbre of houses / month")+
+  xlab("month")+
+  ylab("number of house")+
+    coord_flip()
+```
+
+
+#Number houses between 2016/2017  per commune
+
+```{r}
+housing_data2 %>% filter(year==c(2016, 2017)) %>% 
+  group_by(year, Top_Commune) %>%
+  summarise(count=n())%>% # nbr annoce partop_commune 2016/2017
+  
+ggplot(aes(x= reorder(Top_Commune, count), count))+geom_bar(stat = "identity", fill="#880011")+
+  geom_text(aes(label = count),  hjust =1.1, color= "white")+
+  ggtitle(" Numbre of add  Top_Commune 2016 / 2017")+
+  xlab("Top_Commun")+
+    coord_flip()+
+    facet_wrap(~as.factor(year))
+```
+
+We focus on our taget variable 
+#Price's Distibution.
+```{r}
+summary(housing_data2$Prix.value.dzd)
+```
+
+```{r}
+ggplot(housing_data2, aes(x=Prix.value.dzd ))+  geom_histogram(col = 'white', fill="#880011") + 
+  theme_light()+scale_x_continuous(labels = comma)+
+ggtitle("Distribution of  house prices in Algiers ")
+
+```
+
+
+#Distribution des prix , Garage , jardin
+
+```{r}
+housing_data2 %>% filter(complete.cases(Garage)) %>% 
+ggplot( aes(x = Jardin, y=Prix.value.dzd, color= Garage))+
+geom_boxplot()+
+theme_light()+scale_y_continuous(labels = comma)
+```
+#Distribution of parices with/no Promotion or Paiement
+
+```{r}
+housing_data2 %>% filter(complete.cases(Promotion)) %>% 
+ggplot( aes(x = Promotion, y=Prix.value.dzd, color= Paiement))+
+geom_boxplot()+
+theme_light()+scale_y_continuous(labels = comma)
+```
+ Note : we romve the outliers
+ 
+#Distribution de Superficier
+```{r}
+housing_data2 <- housing_data2 %>% filter(Prix.value.dzd < 50000000)
+```
+```{r}
+summary(housing_data2$Prix.value.dzd)
+```
+```{r}
+housing_data2 %>%  
+ggplot( aes(x=Superficie ))+geom_histogram(fill="#770000", col="white")+
+ggtitle("Distribution de Superficier (m2) ")
+
+```
+
+#Distribution de Superficie , Garage , jardin
+
+```{r}
+housing_data2 %>% filter(complete.cases(Garage)) %>% 
+ggplot( aes(x = Jardin, y=Superficie, color= Garage))+
+geom_boxplot()+
+theme_light()+
+scale_y_continuous(labels = comma)
+```
+ we romove the outliers
+ 
+#par superficie
+```{r}
+housing_data2 <- housing_data2 %>% filter(Superficie <400)
+
+ggplot(housing_data2,aes(x=Superficie, y=Prix.value.dzd ))+
+geom_point()+
+geom_smooth()+
+theme_light()+
+scale_y_continuous(labels = comma)
+```
+
+
+# Distribution of price per years
+
+```{r}
+ggplot(housing_data2,aes(x= Prix.value.dzd, fill= as.factor(year)))+
+  geom_density(col=NA, alpha=0.4 )+
+  theme_light()+
+  scale_x_continuous(labels = comma)+
+   theme(axis.text.y=element_blank())
+```
+# Price distribution per month
+
+```{r}
+ggplot(housing_data2, aes(as.factor(month), Prix.value.dzd))+geom_boxplot(aes(fill=as.factor(month)))+#dist Prix par mois
+   theme_light()+scale_y_continuous(labels = comma)+
+  theme(legend.position="none") +
+  xlab("months")+
+  ylab("Price")
+ 
+```
+
+#Time line
+```{r}
+ month_year <-  housing_data2 %>% group_by(month, year) %>% summarise(nbr=n()) %>% arrange(desc(nbr))
+ month_year
+```
+
+```{r}
+ month_year$month <- match(month_year$month,month.abb)
+```
+
+#plot time line
+
+```{r}
+ggplot(month_year) + 
+  geom_line(aes(month,nbr,group=as.factor(year),color=as.factor(year))) + 
+  theme_gdocs() + 
+  scale_color_gdocs() + 
+  theme(axis.title.x=element_blank())+
+  scale_x_continuous(breaks=seq(1,12))
+```
+
+# Price trend
+```{r}
+price_month_year <- housing_data2 %>% group_by(month, year) %>% summarise(median=median(Prix.value.dzd)) %>% arrange(desc(median))
+price_month_year
+```
+
+```{r}
+ price_month_year$month<- match(price_month_year$month,month.abb)
+```
+
+
+
+```{r}
+ ggplot(price_month_year) + 
+  geom_line(aes(month,median,group=as.factor(year),color=as.factor(year))) + 
+  theme_gdocs() + 
+  scale_color_gdocs() + 
+  theme(axis.title.x=element_blank())+
+  scale_x_continuous(breaks=seq(1,12))
+```
+
+
+
+
+
+
+
