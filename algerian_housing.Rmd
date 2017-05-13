@@ -55,14 +55,14 @@ head(housing_data2)
 ```
 
 
-#create tow variables "cat_vae", "num_var" to distinguiche catégoriales from numerics variables
+#create tow variables "cat_vae", "num_var" to distinguiche catÃ©goriales from numerics variables
 
 #1.Numeric variables 
 ```{r}
 num_var <- names(housing_data2)[which(sapply(housing_data2, is.numeric))]
 num_var
 ```
-#2.Catégorial variables
+#2.CatÃ©gorial variables
 ```{r}
 cat_var <- names(housing_data2)[which(sapply(housing_data2, is.character))]
 cat_var
@@ -94,7 +94,7 @@ ggplot(housing_data2, aes(Nb.Etage))+ geom_histogram()+
 ```
 
 
-# Catégorial variables
+# CatÃ©gorial variables
 ```{r}
 summary(housing_data2[cat_var])
 ```
@@ -158,7 +158,7 @@ Note :  there are many startigies to deal with NA's , the simple is to delete th
 
 # we do some exploration to our predictors varables
 
-# wich house's catégorie is the most commun  ?
+# wich house's catÃ©gorie is the most commun  ?
 
 ```{r}
 commun_nb_piece<- housing_data2 %>% count(Nb.Piece, sort=TRUE) %>% mutate(Percentage= percent(n /sum(n)) )
